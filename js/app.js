@@ -129,7 +129,8 @@ function handleNotifications(event) {
     for (let i = 0; i < value.byteLength; i++) {
         str += String.fromCharCode(value.getUint8(i));
     }
-    window.term_.io.print(str);
+    let messageFromDevice = str.replace(/(?:\\[rn]|[\r\n]+)+/g, '\r\n')
+    window.term_.io.print(bleDevice.name + '> ' + messageFromDevice);
 }
 
 function nusSendString(s) {
@@ -176,15 +177,26 @@ function setupHterm() {
     term.onTerminalReady = function() {
         const io = this.io.push();
         io.onVTKeystroke = (string) => {
-            nusSendString(string);
+            if (string === '\r') {
+                window.term_.io.println(string);
+                nusSendString(window.pendingData + string);
+                window.pendingData = ''
+            } else {
+                window.pendingData = window.pendingData + string;
+                window.term_.io.print(string);
+            }
         };
         io.sendString = nusSendString;
         initContent(io);
         this.setCursorVisible(true);
         this.keyboard.characterEncoding = 'raw';
+        this.keyboard.ctrlVPaste = true;
+
+        window.pendingData = ''
     };
     term.decorate(document.querySelector('#terminal'));
     term.installKeyboard();
+    console.log(term.keyboard);
 
     term.contextMenu.setItems([
         ['Terminal Reset', () => {term.reset(); initContent(window.term_.io);}],
