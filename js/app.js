@@ -3,7 +3,8 @@
 const bleNusServiceUUID  = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
 const bleNusCharRXUUID   = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
 const bleNusCharTXUUID   = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
-const MTU = 20;
+// https://github.com/WebBluetoothCG/web-bluetooth/issues/284#issuecomment-244738626
+const MTU = 99;
 
 var bleDevice;
 var bleServer;
@@ -130,9 +131,21 @@ function handleNotifications(event) {
         str += String.fromCharCode(value.getUint8(i));
     }
     let messageFromDevice = str.replace(/(?:\\[rn]|[\r\n]+)+/g, '\r\n')
-    window.term_.io.print(bleDevice.name + '> ' + messageFromDevice);
+    if (window.userInputWasAppearedSinceLastLastDeviceNamePrefixPrinted) {
+        window.term_.io.print('\r\n' + bleDevice.name + '> ');
+        window.userInputWasAppearedSinceLastLastDeviceNamePrefixPrinted = false;
+    }
+    window.term_.io.print(messageFromDevice);
 }
 
+function displayAndAccumulate(string) {
+    // Possible this data comes from paste operation
+    window.term_.io.print(string.replace(/(?:\\[rn]|[\r\n]+)+/g, '\r\n'));
+    window.pendingData = window.pendingData + string;
+    // nusSendString(window.pendingData + s);
+    // window.pendingData = ''
+    window.userInputWasAppearedSinceLastLastDeviceNamePrefixPrinted = true;
+}
 function nusSendString(s) {
     if(bleDevice && bleDevice.gatt.connected) {
         console.log("send: " + s);
@@ -157,17 +170,15 @@ function sendNextChunk(a) {
       });
 }
 
-
-
 function initContent(io) {
     io.println("\r\n\
-Welcome to Web Device CLI V0.1.0 (03/19/2019)\r\n\
-Copyright (C) 2019  makerdiary.\r\n\
+Welcome to Web VNT Device CLI\r\n\
+based on Web Device CLI V0.1.0 by makerdiary.\r\n\
 \r\n\
 This is a Web Command Line Interface via NUS (Nordic UART Service) using Web Bluetooth.\r\n\
 \r\n\
-  * Source: https://github.com/makerdiary/web-device-cli\r\n\
-  * Live:   https://makerdiary.github.io/web-device-cli\r\n\
+  * Based on: https://github.com/makerdiary/web-device-cli\r\n\
+  * Live:   https://tsenso.github.io/vnt-cli-ble/\r\n\
 ");
 }
 
@@ -177,22 +188,20 @@ function setupHterm() {
     term.onTerminalReady = function() {
         const io = this.io.push();
         io.onVTKeystroke = (string) => {
+            displayAndAccumulate(string);
             if (string === '\r') {
-                window.term_.io.println(string);
                 nusSendString(window.pendingData + string);
                 window.pendingData = ''
-            } else {
-                window.pendingData = window.pendingData + string;
-                window.term_.io.print(string);
             }
         };
-        io.sendString = nusSendString;
+        io.sendString = displayAndAccumulate;
         initContent(io);
         this.setCursorVisible(true);
         this.keyboard.characterEncoding = 'raw';
         this.keyboard.ctrlVPaste = true;
 
         window.pendingData = ''
+        window.userInputWasAppearedSinceLastLastDeviceNamePrefixPrinted = true;
     };
     term.decorate(document.querySelector('#terminal'));
     term.installKeyboard();
@@ -203,7 +212,7 @@ function setupHterm() {
         ['Terminal Clear', () => {term.clearHome();}],
         [hterm.ContextMenu.SEPARATOR],
         ['GitHub', function() {
-            lib.f.openWindow('https://github.com/makerdiary/web-device-cli', '_blank');
+            lib.f.openWindow('https://github.com/tsenso/vnt-cli-ble/', '_blank');
         }],
     ]);
 
